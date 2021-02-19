@@ -1,0 +1,22 @@
+{
+  "name": "@huds0n/error",
+  "version": "1.5.0-beta.8",
+  "description": "Extended JS Error",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "keywords": [
+    "error"
+  ],
+  "contributors": [
+    {
+      "name": "J Hudson"
+    },
+    {
+      "name": "M Hudson"
+    }
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}
