@@ -158,6 +158,7 @@ export class Huds0nError extends Error {
 
       this._message = message;
       this._name = props.name || Huds0nError.errorName;
+      // @ts-ignore
       this._stack = props.stack || super.stack;
 
       this._code = props.code || Huds0nError.CODE_MISSING;
