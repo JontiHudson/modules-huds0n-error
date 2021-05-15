@@ -277,7 +277,7 @@ export class Huds0nError extends Error {
   toJSON() {
     return JSON.stringify({
       ...this.toObject(),
-      _JSONrev: 'EE',
+      _JSONrev: 'Huds0nError',
     });
   }
 
