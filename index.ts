@@ -105,7 +105,11 @@ export class Huds0nError extends Error {
   }
 
   static JSONreviver(key: string, value: any) {
-    if (typeof value === 'object' && value._JSONrev === 'Huds0nError') {
+    if (
+      value &&
+      typeof value === 'object' &&
+      value._JSONrev === 'Huds0nError'
+    ) {
       const { _JSONrev, ...object } = value;
 
       return Huds0nError.revive(object, Huds0nError);
