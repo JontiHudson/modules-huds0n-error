@@ -3,6 +3,7 @@ export class Huds0nError extends Error {
   private static MESSAGE_MISSING = 'Message Missing';
 
   static errorName = 'Huds0nError';
+  static onCreateError: (error: Huds0nError) => void;
 
   private static _typeCheckProps({
     code,
@@ -58,9 +59,14 @@ export class Huds0nError extends Error {
 
   static transform(
     error: any,
-    defaultProps: Huds0nError.Props,
+    defaultError: Huds0nError.Props | string,
     overwrite?: boolean,
   ) {
+    const defaultProps: Huds0nError.Props =
+      typeof defaultError === 'string'
+        ? { code: defaultError, severity: 'HIGH' }
+        : defaultError;
+
     if (error instanceof Huds0nError) {
       if (overwrite) {
         return error.update(defaultProps);
@@ -92,15 +98,13 @@ export class Huds0nError extends Error {
   static JSONparse(JSONstring: string) {
     try {
       return JSON.parse(JSONstring, this.JSONreviver);
-    } catch (error) {
-      const parseError = Huds0nError.transform(error, {
+    } catch (e) {
+      throw Huds0nError.transform(e, {
         code: 'PARSE_ERROR',
         message: 'Unable to parse string',
         severity: 'HIGH',
         info: { JSONstring },
       });
-
-      return parseError;
     }
   }
 
@@ -123,12 +127,12 @@ export class Huds0nError extends Error {
   ): GetReviveError<C> {
     try {
       Huds0nError._typeCheckObject(object);
-    } catch (details) {
-      throw new Huds0nError({
+    } catch (e) {
+      throw Huds0nError.transform(e, {
         code: 'ERROR_REVIVE_ERROR',
         message: 'Unable to revive error. Check format of object.',
         severity: 'HIGH',
-        info: { object, details },
+        info: { object },
       });
     }
 
@@ -136,6 +140,7 @@ export class Huds0nError extends Error {
 
     error._timestamp = object.timestamp || Date.now();
     error._updateHx = object.updateHx || [];
+    error._revived = true;
 
     // @ts-ignore
     return error;
@@ -146,31 +151,38 @@ export class Huds0nError extends Error {
   private _info: Huds0nError.Info;
   private _name: string;
   private _message: string;
+  private _revived: boolean;
   private _severity: Huds0nError.Severity;
   private _stack: string | undefined;
   private _timestamp: number;
   private _updateHx: Huds0nError.Hx;
 
-  constructor(props: Huds0nError.Props) {
+  constructor(props: Huds0nError.Props | string) {
+    const _props: Huds0nError.Props =
+      typeof props === 'string' ? { code: props, severity: 'HIGH' } : props;
+
     try {
-      Huds0nError._typeCheckProps(props);
+      Huds0nError._typeCheckProps(_props);
 
       const message =
-        props.message || String(props.code) || Huds0nError.MESSAGE_MISSING;
+        _props.message || String(_props.code) || Huds0nError.MESSAGE_MISSING;
 
       super(message);
 
       this._message = message;
-      this._name = props.name || Huds0nError.errorName;
+      this._name = _props.name || Huds0nError.errorName;
       // @ts-ignore
-      this._stack = props.stack || super.stack;
+      this._stack = _props.stack || super.stack;
 
-      this._code = props.code || Huds0nError.CODE_MISSING;
-      this._handled = props.handled || false;
-      this._info = props.info || {};
-      this._severity = props.severity || 'HIGH';
+      this._code = _props.code || Huds0nError.CODE_MISSING;
+      this._handled = _props.handled || false;
+      this._info = _props.info || {};
+      this._revived = false;
+      this._severity = _props.severity || 'HIGH';
       this._timestamp = Date.now();
       this._updateHx = [];
+
+      Huds0nError.onCreateError?.(this);
     } catch (details) {
       throw new Huds0nError({
         code: 'ERROR_CONSTRUCT_ERROR',
@@ -201,6 +213,10 @@ export class Huds0nError extends Error {
     return this._name;
   }
 
+  get revived() {
+    return this._revived;
+  }
+
   get severity() {
     return this._severity;
   }
@@ -216,7 +232,7 @@ export class Huds0nError extends Error {
     return true;
   }
 
-  log(message = this.print()) {
+  log(message = this.toStringLong()) {
     switch (this._severity) {
       case 'HIGH':
       case 'MEDIUM':
@@ -233,7 +249,34 @@ export class Huds0nError extends Error {
     return this;
   }
 
-  print() {
+  toObject(): Huds0nError.Object {
+    return {
+      name: this._name,
+      code: this._code,
+      handled: this._handled,
+      message: this._message,
+      severity: this._severity,
+      info: this._info,
+      stack: this._stack || '',
+      timestamp: this._timestamp,
+      updateHx: this._updateHx,
+    };
+  }
+
+  toJSON() {
+    return JSON.stringify({
+      ...this.toObject(),
+      _JSONrev: 'Huds0nError',
+    });
+  }
+
+  toString() {
+    return `${this.name} - ${this.code} (${
+      this.severity + (this.handled ? ' - HANDLED' : '')
+    })`;
+  }
+
+  toStringLong() {
     const border =
       '\n---------------------------------------------------------------\n';
 
@@ -262,33 +305,6 @@ export class Huds0nError extends Error {
       (trace ? '\n' + trace : '');
 
     return border + contents + border;
-  }
-
-  toObject(): Huds0nError.Object {
-    return {
-      name: this._name,
-      code: this._code,
-      handled: this._handled,
-      message: this._message,
-      severity: this._severity,
-      info: this._info,
-      stack: this._stack || '',
-      timestamp: this._timestamp,
-      updateHx: this._updateHx,
-    };
-  }
-
-  toJSON() {
-    return JSON.stringify({
-      ...this.toObject(),
-      _JSONrev: 'Huds0nError',
-    });
-  }
-
-  toString() {
-    return `${this.name} - ${this.code} (${
-      this.severity + (this.handled ? ' - HANDLED' : '')
-    })`;
   }
 
   update(props: Partial<Huds0nError.Props>) {
