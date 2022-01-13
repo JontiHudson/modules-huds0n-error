@@ -1,6 +1,6 @@
 {
   "name": "@huds0n/error",
-  "version": "1.6.0-beta49",
+  "version": "1.6.0-beta50",
   "description": "Extended JS Error",
   "main": "./index.js",
   "types": "./index.d.ts",
