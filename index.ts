@@ -1,15 +1,13 @@
-import type { Types } from "./types";
+import type { Types } from './types';
 
-type GetReviveProps<C> = C extends new (props: infer P) => any ? P : never;
-type GetReviveError<C> = C extends new (props: any) => infer E ? E : never;
+export class Huds0nError<I extends Types.Info = Types.Info> extends Error {
+  private static CODE_MISSING = 'CODE_MISSING';
+  private static MESSAGE_MISSING = 'Message Missing';
 
-export class Huds0nError extends Error {
-  private static CODE_MISSING = "CODE_MISSING";
-  private static MESSAGE_MISSING = "Message Missing";
+  static errorName = 'Huds0nError';
+  static onCreateError: (error: Huds0nError<Types.Info>) => void;
 
-  static errorName = "Huds0nError";
-  static onCreateError: (error: Huds0nError) => void;
-
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   private static _typeCheckProps({
     code,
     handled,
@@ -17,143 +15,160 @@ export class Huds0nError extends Error {
     message,
     severity,
     stack,
-  }: Types.Props) {
-    if (code && typeof code !== "string") {
-      throw "Code needs to be a string";
+  }: Types.Props<Types.Info>) {
+    if (code && typeof code !== 'string') {
+      throw new Error('Code needs to be a string');
     }
 
     if (
       handled &&
-      typeof handled !== "object" &&
-      typeof handled !== "boolean"
+      typeof handled !== 'object' &&
+      typeof handled !== 'boolean'
     ) {
-      throw "Handled needs to be a boolean or object";
+      throw new Error('Handled needs to be a boolean or object');
     }
 
-    if (info && typeof info !== "object") {
-      throw "Info needs to be an object";
+    if (info && typeof info !== 'object') {
+      throw new Error('Info needs to be an object');
     }
 
-    if (message && typeof message !== "string") {
-      throw "Message needs to be a string";
+    if (message && typeof message !== 'string') {
+      throw new Error('Message needs to be a string');
     }
 
     if (
       severity &&
-      severity !== "HIGH" &&
-      severity !== "MEDIUM" &&
-      severity !== "LOW" &&
-      severity !== "NONE"
+      severity !== 'DEBUG' &&
+      severity !== 'ERROR' &&
+      severity !== 'INFO' &&
+      severity !== 'WARN'
     ) {
-      throw "Severity needs to be either HIGH, MEDIUM, LOW, or NONE";
+      throw new Error(
+        'Severity needs to be either ERROR, INFO, WARN, or DEBUG',
+      );
     }
 
-    if (stack && typeof stack !== "string") {
-      throw "Stack needs to be a string";
+    if (stack && typeof stack !== 'string') {
+      throw new Error('Stack needs to be a string');
     }
   }
 
-  private static _typeCheckObject({ timestamp, updateHx }: Types.ErrorObject) {
-    if (timestamp && typeof timestamp !== "number") {
-      throw "Timestamp needs to be a number";
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  private static _typeCheckObject({
+    timestamp,
+    updateHx,
+  }: Types.ErrorObject<Types.Info>) {
+    if (timestamp && typeof timestamp !== 'number') {
+      throw new Error('Timestamp needs to be a number');
     }
 
     if (updateHx && !Array.isArray(updateHx)) {
-      throw "updateHx needs to be an array";
+      throw new Error('updateHx needs to be an array');
     }
   }
 
-  static transform(
-    error: any,
-    defaultError: Types.Props | string,
-    overwrite?: boolean
-  ) {
-    const defaultProps: Types.Props =
-      typeof defaultError === "string" ? { code: defaultError } : defaultError;
+  static create<I extends Types.Info>(
+    props: Types.CreateProps<I>,
+  ): Huds0nError<I & { parentError?: object }> {
+    if (!props.from) {
+      return new Huds0nError<I>(props);
+    }
 
-    let transformedError: Huds0nError;
+    const { from, overwrite } = props;
 
-    if (error instanceof Huds0nError) {
-      transformedError = error;
-    } else if (error instanceof Error) {
-      const { message, stack } = error;
+    let transformedError: Huds0nError<I>;
 
-      transformedError = new Huds0nError({
-        ...defaultProps,
-        message,
+    if (from instanceof Huds0nError<I>) {
+      transformedError = from;
+      if (!overwrite && props.info) {
+        transformedError._info = { ...props.info, ...transformedError._info };
+      }
+    } else if (typeof from === 'object') {
+      const { message, stack } = from as any;
+
+      transformedError = new Huds0nError<I & { parentError: object }>({
+        ...props,
+        message: message || props.message,
         stack,
-        info: { ...defaultProps.info },
+        info: { parentError: { ...from }, ...props.info } as I & {
+          parentError: object;
+        },
       });
-      transformedError._parent = error;
+
+      transformedError._parent = from;
     } else {
-      transformedError = new Huds0nError({
-        ...defaultProps,
-        info: { ...defaultProps.info, parentError: error },
+      transformedError = new Huds0nError<I>({
+        ...props,
+        ...(typeof from === 'string' && { message: from }),
       });
-      transformedError._parent = error;
+
+      transformedError._parent = from;
     }
 
     if (overwrite) {
-      transformedError.update(defaultProps);
+      transformedError.update(props);
     }
 
     return transformedError;
   }
 
-  static JSONparse(JSONstring: string) {
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  static JSONparse(jsonString: string) {
     try {
-      return JSON.parse(JSONstring, this.JSONreviver);
+      return JSON.parse(jsonString, this.JSONreviver);
     } catch (error) {
-      throw Huds0nError.transform(error, {
-        code: "PARSE_ERROR",
-        message: "Unable to parse string",
-        severity: "HIGH",
-        info: { JSONstring },
+      throw Huds0nError.create({
+        code: 'PARSE_ERROR',
+        message: 'Unable to parse string',
+        severity: 'ERROR',
+        info: { jsonString },
+        from: error,
       });
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   static JSONreviver(key: string, value: any) {
     if (
       value &&
-      typeof value === "object" &&
-      value._JSONrev === "Huds0nError"
+      typeof value === 'object' &&
+      value._JSONrev === 'Huds0nError'
     ) {
+      // eslint-disable-next-line @typescript-eslint/naming-convention
       const { _JSONrev, ...object } = value;
 
-      return Huds0nError.revive(object, Huds0nError);
+      return Huds0nError.revive(object);
     }
     return value;
   }
 
-  static revive<C extends new (props: any) => Huds0nError>(
-    object: GetReviveProps<C>,
-    Class: C
-  ): GetReviveError<C> {
+  static revive<I extends Types.Info>(
+    object: Types.ErrorObject<I>,
+  ): Huds0nError<I> {
     try {
       Huds0nError._typeCheckObject(object);
     } catch (e) {
-      throw Huds0nError.transform(e, {
-        code: "ERROR_REVIVE_ERROR",
-        message: "Unable to revive error. Check format of object.",
-        severity: "HIGH",
+      throw Huds0nError.create({
+        code: 'ERROR_REVIVE_ERROR',
+        message: 'Unable to revive error. Check format of object.',
+        severity: 'ERROR',
         info: { object },
+        from: e,
       });
     }
 
-    const error = new Class(object);
+    const error = new Huds0nError<I>(object);
 
     error._timestamp = object.timestamp || Date.now();
     error._updateHx = object.updateHx || [];
     error._revived = true;
 
-    // @ts-ignore
     return error;
   }
 
   private _code: string | number;
-  private _handled: boolean | Object;
-  private _info: Types.Info;
+  private _handled: boolean | object;
+  private _info: I;
   private _name: string;
   private _message: string;
   private _parent: any;
@@ -161,11 +176,11 @@ export class Huds0nError extends Error {
   private _severity: Types.Severity;
   private _stack: string | undefined;
   private _timestamp: number;
-  private _updateHx: Types.UpdateHx;
+  private _updateHx: Types.UpdateHx<I>;
 
-  constructor(props: Types.Props | string) {
-    const _props: Types.Props =
-      typeof props === "string" ? { code: props, severity: "HIGH" } : props;
+  private constructor(props: Types.Props<I> | string) {
+    const _props: Types.Props<I> =
+      typeof props === 'string' ? { code: props, severity: 'ERROR' } : props;
 
     try {
       Huds0nError._typeCheckProps(_props);
@@ -177,23 +192,22 @@ export class Huds0nError extends Error {
 
       this._message = message;
       this._name = _props.name || Huds0nError.errorName;
-      // @ts-ignore
       this._stack = _props.stack || super.stack;
 
       this._code = _props.code || Huds0nError.CODE_MISSING;
       this._handled = _props.handled || false;
-      this._info = _props.info || {};
+      this._info = _props.info || ({} as I);
       this._revived = false;
-      this._severity = _props.severity || "HIGH";
+      this._severity = _props.severity || 'ERROR';
       this._timestamp = Date.now();
       this._updateHx = [];
 
       Huds0nError.onCreateError?.(this);
     } catch (details) {
       throw new Huds0nError({
-        code: "ERROR_CONSTRUCT_ERROR",
-        message: "Unable to construct error. Check format of props.",
-        severity: "HIGH",
+        code: 'ERROR_CONSTRUCT_ERROR',
+        message: 'Unable to construct error. Check format of props.',
+        severity: 'ERROR',
         info: { props, details },
       });
     }
@@ -238,17 +252,16 @@ export class Huds0nError extends Error {
 
     this._handled = handledInfo || true;
 
-    console.log("Handled: " + this.toString());
+    console.log('Handled: ' + this.toString());
     return true;
   }
 
   log(message = this.toStringLong()) {
     switch (this._severity) {
-      case "HIGH":
-      case "MEDIUM":
+      case 'ERROR':
         console.error(message);
         break;
-      case "LOW":
+      case 'WARN':
         console.warn(message);
         break;
       default:
@@ -258,7 +271,7 @@ export class Huds0nError extends Error {
     return this;
   }
 
-  toObject(): Types.ErrorObject {
+  toObject(): Types.ErrorObject<I> {
     return {
       name: this._name,
       code: this._code,
@@ -266,7 +279,7 @@ export class Huds0nError extends Error {
       message: this._message,
       severity: this._severity,
       info: this._info,
-      stack: this._stack || "",
+      stack: this._stack || '',
       timestamp: this._timestamp,
       updateHx: this._updateHx,
     };
@@ -275,49 +288,49 @@ export class Huds0nError extends Error {
   toJSON() {
     return JSON.stringify({
       ...this.toObject(),
-      _JSONrev: "Huds0nError",
+      _JSONrev: 'Huds0nError',
     });
   }
 
   toString() {
     return `${this.name} - ${this.code} (${
-      this.severity + (this.handled ? " - HANDLED" : "")
+      this.severity + (this.handled ? ' - HANDLED' : '')
     })`;
   }
 
   toStringLong() {
     const border =
-      "\n---------------------------------------------------------------\n";
+      '\n---------------------------------------------------------------\n';
 
     const name = this.toString();
     const info = Object.keys(this._info).length
-      ? "\nInfo: " + JSON.stringify(this._info, null, 2)
-      : "";
+      ? '\nInfo: ' + JSON.stringify(this._info, undefined, 2)
+      : '';
     const handledInfo =
-      typeof this._handled === "object"
-        ? "\nHandled Info: " + JSON.stringify(this._handled, null, 2)
-        : "";
+      typeof this._handled === 'object'
+        ? '\nHandled Info: ' + JSON.stringify(this._handled, undefined, 2)
+        : '';
     const updateHx = this._updateHx.length
-      ? "\nUpdateHx: " + JSON.stringify(this._updateHx, null, 2)
-      : "";
+      ? '\nUpdateHx: ' + JSON.stringify(this._updateHx, undefined, 2)
+      : '';
     const trace = this._stack
-      ? this._stack.substring(this._stack.indexOf("\n") + 1)
-      : null;
+      ? this._stack.substring(this._stack.indexOf('\n') + 1)
+      : undefined;
 
     const contents =
       name +
-      "\n" +
+      '\n' +
       this._message +
       info +
       handledInfo +
       updateHx +
-      (trace ? "\n" + trace : "");
+      (trace ? '\n' + trace : '');
 
     return border + contents + border;
   }
 
-  update(props: Partial<Types.Props>) {
-    const prev: Partial<Types.Props> & { timestamp: number } = {
+  update(props: Partial<Types.Props<I>>) {
+    const prev: Partial<Types.Props<I>> & { timestamp: number } = {
       timestamp: this._timestamp,
     };
     this._timestamp = Date.now();
@@ -348,9 +361,9 @@ export class Huds0nError extends Error {
     if (props.info) {
       Object.entries(props.info).forEach(([key, value]) => {
         if (this._info[key] !== value) {
-          prev.info = prev.info || {};
-          prev.info[key] = this.info[key];
-          this.info[key] = value;
+          prev.info = prev.info || ({} as I);
+          prev.info[key as keyof I] = this.info[key];
+          this.info[key as keyof I] = value;
         }
       });
     }
@@ -359,6 +372,6 @@ export class Huds0nError extends Error {
   }
 }
 
-export type { Types as ErrorTypes } from "./types";
+export type { Types as ErrorTypes } from './types';
 
 export default Huds0nError;
